@@ -3,7 +3,7 @@ CXXFLAGS = -Wall -O2
 LDFLAGS  = -lGL -lGLU -lglut
 
 TARGET = ex3
-SRC    = main.cpp
+SRC    = main.cpp trackball.cpp drawing.cpp
 
 $(TARGET): $(SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
