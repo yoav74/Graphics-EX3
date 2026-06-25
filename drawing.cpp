@@ -257,6 +257,21 @@ static void drawRightSide()
 }
 
 // ---------------------------------------------------------------------------
+// Public: XYZ axes
+// ---------------------------------------------------------------------------
+
+void drawAxes()
+{
+    glDisable(GL_LIGHTING);
+    glBegin(GL_LINES);
+    glColor3f(1, 0, 0); glVertex3f(-5, 0, 0); glVertex3f(5, 0, 0); // X red
+    glColor3f(0, 1, 0); glVertex3f(0, -5, 0); glVertex3f(0, 5, 0); // Y green
+    glColor3f(0, 0, 1); glVertex3f(0, 0, -5); glVertex3f(0, 0, 5); // Z blue
+    glEnd();
+    glEnable(GL_LIGHTING);
+}
+
+// ---------------------------------------------------------------------------
 // Public: light indicator sphere
 // ---------------------------------------------------------------------------
 

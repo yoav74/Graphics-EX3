@@ -13,18 +13,45 @@
 #include "drawing.h"
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+// Window
+static const int WIN_WIDTH = 640;
+static const int WIN_HEIGHT = 480;
+
+// Camera / projection
+static const float FOV_Y = 45.0f;
+static const float NEAR_PLANE = 0.1f;
+static const float FAR_PLANE = 100.0f;
+static const float ZOOM_DEFAULT = 6.0f;
+static const float ZOOM_STEP = 0.4f;
+static const float ZOOM_MIN = 1.5f;
+static const float ZOOM_MAX = 20.0f;
+
+// GLUT encodes the scroll wheel as mouse button numbers 3 and 4.
+static const int SCROLL_UP = 3;
+static const int SCROLL_DOWN = 4;
+
+// Key bindings
+static const unsigned char KEY_ESC = 27;
+static const unsigned char KEY_WIREFRAME = 'p';
+static const unsigned char KEY_AXES = 'a';
+static const unsigned char KEY_LIGHTS = 'l';
+
+// Light positions in world space (car at origin, w=1 → positional).
+// Placed so their indicator spheres are visible in the default view.
+static const GLfloat LIGHT0_POS[4] = {1.0f, 1.5f, 2.0f, 1.0f};   // warm key, rear-right-above
+static const GLfloat LIGHT1_POS[4] = {-1.0f, 1.5f, -2.0f, 1.0f}; // cool fill, front-left-above
+
+// ---------------------------------------------------------------------------
 // Scene state
 // ---------------------------------------------------------------------------
 
 static bool showLights = true;
-
-// Positional light positions in world space (car is at origin).
-// w=1 makes them positional (not directional).
-// Positions chosen so the indicator spheres are visible in the default view.
-// At camera distance 6, the frustum at z_world=-2 covers roughly x∈[-3.3,3.3],
-// y∈[-2.5,2.5] — both positions sit comfortably inside that.
-static const GLfloat LIGHT0_POS[4] = {  1.0f, 1.5f,  2.0f, 1.0f }; // warm key, rear-right-above
-static const GLfloat LIGHT1_POS[4] = { -1.0f, 1.5f, -2.0f, 1.0f }; // cool fill, front-left-above
+static bool showAxes = false;
+static bool wireframe = false;
+static float zoomDist = ZOOM_DEFAULT;
 
 // ---------------------------------------------------------------------------
 // Callbacks
@@ -32,13 +59,14 @@ static const GLfloat LIGHT1_POS[4] = { -1.0f, 1.5f, -2.0f, 1.0f }; // cool fill,
 
 void reshape(int width, int height)
 {
-    if (height == 0) height = 1;
+    if (height == 0)
+        height = 1;
 
     glViewport(0, 0, width, height);
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
+    gluPerspective(FOV_Y, (float)width / (float)height, NEAR_PLANE, FAR_PLANE);
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
@@ -65,24 +93,24 @@ void initGL()
     glEnable(GL_LIGHTING);
 
     // Soft global ambient so shadowed faces aren't pure black
-    GLfloat globalAmb[] = { 0.12f, 0.12f, 0.14f, 1.0f };
+    GLfloat globalAmb[] = {0.12f, 0.12f, 0.14f, 1.0f};
     glLightModelfv(GL_LIGHT_MODEL_AMBIENT, globalAmb);
 
     // Light 0 — warm key light (demonstrates diffuse + specular)
-    GLfloat l0amb[]  = { 0.00f, 0.00f, 0.00f, 1.0f };
-    GLfloat l0diff[] = { 1.00f, 0.95f, 0.80f, 1.0f };
-    GLfloat l0spec[] = { 1.00f, 1.00f, 0.90f, 1.0f };
-    glLightfv(GL_LIGHT0, GL_AMBIENT,  l0amb);
-    glLightfv(GL_LIGHT0, GL_DIFFUSE,  l0diff);
+    GLfloat l0amb[] = {0.00f, 0.00f, 0.00f, 1.0f};
+    GLfloat l0diff[] = {1.00f, 0.95f, 0.80f, 1.0f};
+    GLfloat l0spec[] = {1.00f, 1.00f, 0.90f, 1.0f};
+    glLightfv(GL_LIGHT0, GL_AMBIENT, l0amb);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, l0diff);
     glLightfv(GL_LIGHT0, GL_SPECULAR, l0spec);
     glEnable(GL_LIGHT0);
 
     // Light 1 — cool fill light (second positional source)
-    GLfloat l1amb[]  = { 0.00f, 0.00f, 0.00f, 1.0f };
-    GLfloat l1diff[] = { 0.40f, 0.45f, 0.65f, 1.0f };
-    GLfloat l1spec[] = { 0.30f, 0.35f, 0.50f, 1.0f };
-    glLightfv(GL_LIGHT1, GL_AMBIENT,  l1amb);
-    glLightfv(GL_LIGHT1, GL_DIFFUSE,  l1diff);
+    GLfloat l1amb[] = {0.00f, 0.00f, 0.00f, 1.0f};
+    GLfloat l1diff[] = {0.40f, 0.45f, 0.65f, 1.0f};
+    GLfloat l1spec[] = {0.30f, 0.35f, 0.50f, 1.0f};
+    glLightfv(GL_LIGHT1, GL_AMBIENT, l1amb);
+    glLightfv(GL_LIGHT1, GL_DIFFUSE, l1diff);
     glLightfv(GL_LIGHT1, GL_SPECULAR, l1spec);
     glEnable(GL_LIGHT1);
 
@@ -95,7 +123,7 @@ void display()
     glLoadIdentity();
 
     // Pull the camera back so the car at the origin is fully visible.
-    glTranslatef(0.0f, 0.0f, -6.0f);
+    glTranslatef(0.0f, 0.0f, -zoomDist);
 
     // Set light positions NOW (after camera pullback but BEFORE trackball).
     // OpenGL transforms positions by the current modelview matrix and stores
@@ -108,21 +136,48 @@ void display()
     if (showLights)
     {
         drawLightSphere(LIGHT0_POS[0], LIGHT0_POS[1], LIGHT0_POS[2],
-                        1.0f, 0.95f, 0.75f);   // warm yellow
+                        1.0f, 0.95f, 0.75f); // warm yellow
         drawLightSphere(LIGHT1_POS[0], LIGHT1_POS[1], LIGHT1_POS[2],
-                        0.5f, 0.60f, 0.90f);   // cool blue
+                        0.5f, 0.60f, 0.90f); // cool blue
     }
 
     // Apply the trackball rotation — only the model rotates, lights stay put.
     trackballApply();
 
+    // Wireframe mode applies to all filled polygons; lines and points unaffected.
+    if (wireframe)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
     drawCar();
+
+    if (wireframe)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    if (showAxes)
+        drawAxes();
 
     glutSwapBuffers();
 }
 
 void mouseButton(int button, int state, int x, int y)
 {
+    if (button == SCROLL_UP && state == GLUT_DOWN)
+    {
+        zoomDist -= ZOOM_STEP;
+        if (zoomDist < ZOOM_MIN)
+            zoomDist = ZOOM_MIN;
+        glutPostRedisplay();
+        return;
+    }
+    if (button == SCROLL_DOWN && state == GLUT_DOWN)
+    {
+        zoomDist += ZOOM_STEP;
+        if (zoomDist > ZOOM_MAX)
+            zoomDist = ZOOM_MAX;
+        glutPostRedisplay();
+        return;
+    }
+
     if (button == GLUT_LEFT_BUTTON)
     {
         if (state == GLUT_DOWN)
@@ -142,11 +197,22 @@ void keyboard(unsigned char key, int x, int y)
 {
     switch (key)
     {
-    case 'l': case 'L':
+    case KEY_LIGHTS:
+    case KEY_LIGHTS - 32: // uppercase
         showLights = !showLights;
         glutPostRedisplay();
         break;
-    case 27:
+    case KEY_WIREFRAME:
+    case KEY_WIREFRAME - 32:
+        wireframe = !wireframe;
+        glutPostRedisplay();
+        break;
+    case KEY_AXES:
+    case KEY_AXES - 32:
+        showAxes = !showAxes;
+        glutPostRedisplay();
+        break;
+    case KEY_ESC:
         glutLeaveMainLoop();
         break;
     }
@@ -155,11 +221,11 @@ void keyboard(unsigned char key, int x, int y)
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-    glutInitWindowSize(640, 480);
+    glutInitWindowSize(WIN_WIDTH, WIN_HEIGHT);
     glutCreateWindow("Exercise 3 - Car Viewer");
 
     initGL();
