@@ -9,4 +9,4 @@ $(TARGET): $(SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 clean:
-	rm -f $(TARGET) *.o *.d *~
+	rm -f $(TARGET) *.o *.d *~ *.exe

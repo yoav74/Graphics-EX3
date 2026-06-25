@@ -1,5 +1,8 @@
 #pragma once
 
-// Draws a unit cube centered at the origin, with each face a different color.
-// Used as a placeholder until the car model is built.
-void drawCube();
+void drawCar();
+
+// Draws a small emissive sphere at (x,y,z) with the given RGB colour.
+// Diffuse/specular are zeroed so the sphere is not affected by scene lights.
+// Call before trackballApply() so it stays world-fixed.
+void drawLightSphere(float x, float y, float z, float r, float g, float b);
